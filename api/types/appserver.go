@@ -29,7 +29,7 @@ import (
 // AppServer represents a single proxied web app.
 type AppServer interface {
 	// Resource provides common resource methods.
-	Resource
+	ResourceWithLabels
 	// GetNamespace returns server namespace.
 	GetNamespace() string
 	// GetTeleportVersion returns the teleport version the server is running on.
@@ -251,6 +251,33 @@ func (s *AppServerV3) CheckAndSetDefaults() error {
 		return trace.Wrap(err)
 	}
 	return nil
+}
+
+// Origin returns the origin value of the resource.
+func (s *AppServerV3) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *AppServerV3) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
+}
+
+// GetAllLabels returns all resource's labels. Considering:
+// * Static labels from `Metadata.Labels` and `Spec.Database`.
+func (s *AppServerV3) GetAllLabels() map[string]string {
+	staticLabels := make(map[string]string)
+	for name, value := range s.Metadata.Labels {
+		staticLabels[name] = value
+	}
+
+	if s.Spec.App != nil {
+		for name, value := range s.Spec.App.Metadata.Labels {
+			staticLabels[name] = value
+		}
+	}
+
+	return staticLabels
 }
 
 // Copy returns a copy of this app server object.

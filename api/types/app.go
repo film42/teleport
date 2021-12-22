@@ -30,7 +30,7 @@ import (
 // Application represents a web app.
 type Application interface {
 	// ResourceWithOrigin provides common resource methods.
-	ResourceWithOrigin
+	ResourceWithLabels
 	// GetNamespace returns the app namespace.
 	GetNamespace() string
 	// GetStaticLabels returns the app static labels.
@@ -41,8 +41,6 @@ type Application interface {
 	GetDynamicLabels() map[string]CommandLabel
 	// SetDynamicLabels sets the app dynamic labels.
 	SetDynamicLabels(map[string]CommandLabel)
-	// GetAllLabels returns combined static and dynamic labels.
-	GetAllLabels() map[string]string
 	// LabelsString returns all labels as a string.
 	LabelsString() string
 	// String returns string representation of the app.
