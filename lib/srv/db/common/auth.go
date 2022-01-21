@@ -366,7 +366,7 @@ func (a *dbAuth) getTLSConfigVerifyFull(ctx context.Context, sessionCtx *Session
 		// Generate client SSL certificate
 		clientCert, err := a.generateCloudSQLClientCertificate(ctx, sessionCtx)
 		if err != nil {
-			return nil, trace.Errorf("generating client certificate: %w", err)
+			return nil, trace.Wrap(err, "failed to generate Cloud SQL ephemeral client certificate for %q", tlsConfig.ServerName)
 		}
 		tlsConfig.Certificates = append(tlsConfig.Certificates, *clientCert)
 	}

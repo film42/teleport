@@ -41,6 +41,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	// CloudSQLListenPort is the port used by Cloud SQL MySQL instances.
+	CloudSQLListenPort = "3306"
+	// CloudSQLProxyListenPort is the port used by Cloud Proxy for MySQL instances.
+	CloudSQLProxyListenPort = "3307"
+)
+
 // Engine implements the MySQL database service that accepts client
 // connections coming over reverse tunnel from the proxy and proxies
 // them between the proxy and the MySQL database instance.
@@ -198,23 +205,22 @@ func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*clie
 			return nil, trace.Wrap(err)
 		}
 		// workaround issue generating ephemeral certs for secure connections
-		// by creating a TLS connection to the cloud proxy port (3307) and
-		// overridding mysql client's connection. mysql on 3306 does not trust
-		// the ephemeral cert's CA but cloud proxy does.
+		// by creating a TLS connection to the cloud proxy port and
+		// overridding mysql client's connection. mysql on the default port
+		// does not trust the ephemeral cert's CA but cloud proxy does.
 		if sessionCtx.Database.GetTLS().Mode != types.DatabaseTLSMode_INSECURE {
 			uri := sessionCtx.Database.GetURI()
 			host, port, err := net.SplitHostPort(uri)
-			if err == nil && port == "3306" {
-				uri = net.JoinHostPort(host, "3307")
-				e.Log.Debug("Overrided URI port from 3306 to 3307")
+			if err == nil && port == CloudSQLListenPort {
+				uri = net.JoinHostPort(host, CloudSQLProxyListenPort)
 			}
-			tlsconn, err := tls.Dial("tcp", uri, tlsConfig)
+			tlsConn, err := tls.Dial("tcp", uri, tlsConfig)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}
 			clientOpt = func(conn *client.Conn) {
 				conn.Conn.Close() // close connection created by mysql client
-				conn.Conn = packet.NewTLSConn(tlsconn)
+				conn.Conn = packet.NewTLSConn(tlsConn)
 			}
 		}
 	case sessionCtx.Database.IsAzure():
