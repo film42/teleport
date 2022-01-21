@@ -22,7 +22,7 @@ import (
 	"net"
 
 	"github.com/gravitational/trace"
-	"github.com/siddontang/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/mysql"
 )
 
 // Packet is the common interface for MySQL wire protocol packets.

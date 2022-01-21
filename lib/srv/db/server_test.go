@@ -25,7 +25,7 @@ import (
 	"github.com/gravitational/teleport/lib/limiter"
 
 	"github.com/jackc/pgconn"
-	"github.com/siddontang/go-mysql/client"
+	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/mongo"
