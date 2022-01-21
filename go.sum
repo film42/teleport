@@ -401,8 +401,7 @@ github.com/gravitational/configure v0.0.0-20180808141939-c3428bd84c23 h1:havbccu
 github.com/gravitational/configure v0.0.0-20180808141939-c3428bd84c23/go.mod h1:XL9nebvlfNVvRzRPWdDcWootcyA0l7THiH/A+W1233g=
 github.com/gravitational/form v0.0.0-20151109031454-c4048f792f70 h1:To76nCJtM3DI0mdq3nGLzXqTV1wNOJByxv01+u9/BxM=
 github.com/gravitational/form v0.0.0-20151109031454-c4048f792f70/go.mod h1:88hFR45MpUd23d2vNWE/dYtesU50jKsbz0I9kH7UaBY=
-github.com/gravitational/go-mysql v1.3.1 h1:HnKIauunLlA10OF8PzupDS22hhUvoK4UfhagJ66Rdto=
-github.com/gravitational/go-mysql v1.3.1/go.mod h1:3lFZKf7l95Qo70+3XB2WpiSf9wu2s3na3geLMaIIrqQ=
+github.com/gravitational/go-mysql v1.4.1-beta1 h1:lsfQ96rtMCMpXF+0OI+E3xrsrAGZdXtU/I9Wu4vPd64=
 github.com/gravitational/go-mysql v1.4.1-beta1/go.mod h1:3lFZKf7l95Qo70+3XB2WpiSf9wu2s3na3geLMaIIrqQ=
 github.com/gravitational/go-oidc v0.0.5 h1:kxsCknoOZ+KqIAoYLLdHuQcvcc+SrQlnT7xxIM8oo6o=
 github.com/gravitational/go-oidc v0.0.5/go.mod h1:SevmOUNdOB0aD9BAIgjptZ6oHkKxMZZgA70nwPfgU/w=
