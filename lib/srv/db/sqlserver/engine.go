@@ -30,11 +30,11 @@ import (
 	"github.com/gravitational/teleport/lib/srv/db/common"
 	"github.com/gravitational/teleport/lib/srv/db/common/role"
 	"github.com/gravitational/teleport/lib/srv/db/sqlserver/protocol"
-	"github.com/gravitational/trace"
 
 	mssql "github.com/denisenkom/go-mssqldb"
 	"github.com/denisenkom/go-mssqldb/msdsn"
 
+	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
 )
@@ -148,7 +148,12 @@ func (e *Engine) HandleConnection(ctx context.Context, sessionCtx *common.Sessio
 		return trace.BadParameter("expected *mssql.Conn, got: %T", conn)
 	}
 
-	err = protocol.WriteLogin7ResponseTokens(e.clientConn, mssqlConn.Login7Tokens())
+	tokens, err := mssqlConn.GetLoginTokens()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	err = protocol.WriteLogin7Response(e.clientConn, tokens)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -219,7 +224,7 @@ func (e *Engine) receiveFromClient(clientConn, serverConn io.ReadWriteCloser, cl
 			return
 		}
 
-		buf := append(pkt.PacketHeader.Raw, pkt.Data...)
+		buf := append(pkt.HeaderBytes, pkt.Data...)
 
 		// if pkt.Type == protocol.PacketTypeSQLBatch {
 		// 	sqlBatch, err := protocol.ParseSQLBatchPacket(pkt)

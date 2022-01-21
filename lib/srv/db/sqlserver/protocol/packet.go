@@ -17,6 +17,7 @@ limitations under the License.
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -28,69 +29,83 @@ import (
 type PacketHeader struct {
 	Type     uint8
 	Status   uint8
-	Length   uint16
-	SPID     uint16
+	Length   uint16 // network byte order (big-endian)
+	SPID     uint16 // network byte order (big-endian)
 	PacketID uint8
 	Window   uint8
-	Raw      []byte
+}
+
+// Marshal marshals the packet header to the wire protocol byte representation.
+func (h *PacketHeader) Marshal() ([]byte, error) {
+	buf := bytes.NewBuffer(make([]byte, 0, packetHeaderSize))
+	if err := binary.Write(buf, binary.BigEndian, h); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return buf.Bytes(), nil
 }
 
 type Packet struct {
 	// Header
 	PacketHeader
 
-	// Data (without header)
+	// HeaderBytes contains packet header raw bytes.
+	HeaderBytes []byte
+
+	// Data (without header).
 	Data []byte
 }
 
-func readPacketHeader(conn io.Reader) (*PacketHeader, error) {
-	// Packet header is 8 bytes.
-	var header [packetHeaderSize]byte
-	if _, err := io.ReadFull(conn, header[:]); err != nil {
+// ReadPacket reads a single full packet from the provided connection.
+func ReadPacket(conn io.Reader) (*Packet, error) {
+	// Read 8-byte packet header.
+	var headerBytes [packetHeaderSize]byte
+	if _, err := io.ReadFull(conn, headerBytes[:]); err != nil {
 		return nil, trace.ConvertSystemError(err)
 	}
-	return &PacketHeader{
-		Type:     header[0],
-		Status:   header[1],
-		Length:   binary.BigEndian.Uint16(header[2:4]),
-		SPID:     binary.BigEndian.Uint16(header[4:6]),
-		PacketID: header[6],
-		Window:   header[7],
-		Raw:      header[:],
-	}, nil
-}
 
-func ReadPacket(conn io.Reader) (*Packet, error) {
-	// Read packet header.
-	header, err := readPacketHeader(conn)
-	if err != nil {
+	// Unmarshal packet header from the binary form.
+	var header PacketHeader
+	if err := binary.Read(bytes.NewReader(headerBytes[:]), binary.BigEndian, &header); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	// Build packet.
-	pkt := Packet{
-		PacketHeader: *header,
-	}
-
 	// Read packet data. Packet length includes header.
-	pkt.Data = make([]byte, pkt.Length-packetHeaderSize)
-	_, err = io.ReadFull(conn, pkt.Data)
-	if err != nil {
+	dataBytes := make([]byte, 0, header.Length-packetHeaderSize)
+	if _, err := io.ReadFull(conn, dataBytes); err != nil {
 		return nil, trace.ConvertSystemError(err)
 	}
 
 	fmt.Println("=== RECEIVED PACKET ===")
-	fmt.Println(hex.Dump(append(header.Raw, pkt.Data...)))
+	fmt.Println(hex.Dump(append(headerBytes[:], dataBytes...)))
 	fmt.Println("=======================")
 
-	return &pkt, nil
+	return &Packet{
+		PacketHeader: header,
+		HeaderBytes:  headerBytes[:],
+		Data:         dataBytes,
+	}, nil
+}
+
+// makePacket prepends header to the provided packet data.
+func makePacket(pktType uint8, pktData []byte) ([]byte, error) {
+	header := PacketHeader{
+		Type:   pktType,
+		Status: PacketStatusLast,
+		Length: uint16(len(pktData)),
+	}
+	headerBytes, err := header.Marshal()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return append(headerBytes, pktData...), nil
 }
 
 const (
-	PacketTypeResponse uint8 = 4  // 0x04
-	PacketTypeLogin7   uint8 = 16 // 0x10
-	PacketTypePreLogin uint8 = 18 // 0x12
-	PacketTypeSQLBatch uint8 = 0x01
+	PacketTypeResponse uint8 = 0x04
+	PacketTypeLogin7   uint8 = 0x10
+	PacketTypePreLogin uint8 = 0x12
+
+	PacketStatusLast uint8 = 0x01
 
 	packetHeaderSize = 8
 )
