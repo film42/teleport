@@ -363,12 +363,21 @@ func (a *dbAuth) getTLSConfigVerifyFull(ctx context.Context, sessionCtx *Session
 		tlsConfig.InsecureSkipVerify = true
 		// This will verify CN and cert chain on each connection.
 		tlsConfig.VerifyConnection = getVerifyCloudSQLCertificate(tlsConfig.RootCAs)
-		// Generate client SSL certificate
-		clientCert, err := a.generateCloudSQLClientCertificate(ctx, sessionCtx)
+
+		// Generate client SSL certificate when instance's RequireSsl setting is true.
+		dbInstance, err := a.getCloudSQLDatabaseInstance(ctx, sessionCtx)
 		if err != nil {
-			return nil, trace.Wrap(err, "failed to generate Cloud SQL ephemeral client certificate for %q", tlsConfig.ServerName)
+			return nil, trace.Wrap(err, "failed to get Cloud SQL instance information for %q", tlsConfig.ServerName)
+		} else if dbInstance.Settings == nil || dbInstance.Settings.IpConfiguration == nil {
+			return nil, trace.Errorf("failed to find Cloud SQL settings for %q", tlsConfig.ServerName)
 		}
-		tlsConfig.Certificates = append(tlsConfig.Certificates, *clientCert)
+		if dbInstance.Settings.IpConfiguration.RequireSsl {
+			clientCert, err := a.generateCloudSQLClientCertificate(ctx, sessionCtx)
+			if err != nil {
+				return nil, trace.Wrap(err, "failed to generate Cloud SQL ephemeral client certificate for %q", tlsConfig.ServerName)
+			}
+			tlsConfig.Certificates = []tls.Certificate{*clientCert}
+		}
 	}
 
 	dbTLSConfig := sessionCtx.Database.GetTLS()
@@ -514,6 +523,21 @@ func (a *dbAuth) GetAuthPreference(ctx context.Context) (types.AuthPreference, e
 // Close releases all resources used by authenticator.
 func (a *dbAuth) Close() error {
 	return a.cfg.Clients.Close()
+}
+
+// getCloudSQLDatabaseInstance returns database instance details for the
+// project/instance configured in sessionCtx.
+func (a *dbAuth) getCloudSQLDatabaseInstance(ctx context.Context, sessionCtx *Session) (*sqladmin.DatabaseInstance, error) {
+	svc, err := a.cfg.Clients.GetGCPSQLAdminClient(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	gcp := sessionCtx.Database.GetGCP()
+	dbInstance, err := svc.Instances.Get(gcp.ProjectID, gcp.InstanceID).Context(ctx).Do()
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return dbInstance, nil
 }
 
 // generateCloudSQLClientCertificate returns a new client certificate with RSA key generated
