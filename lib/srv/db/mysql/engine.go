@@ -163,17 +163,18 @@ func (e *Engine) checkAccess(ctx context.Context, sessionCtx *common.Session) er
 
 // connect establishes connection to MySQL database.
 func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*client.Conn, error) {
+	var dialer client.Dialer
+	var password string
+	user := sessionCtx.DatabaseUser
+
 	tlsConfig, err := e.Auth.GetTLSConfig(ctx, sessionCtx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	// clientOpt sets tlsConfig in the mysql client.
-	// this is overridden for Cloud SQL secure connections.
-	clientOpt := func(conn *client.Conn) {
+	connectOpts := func(conn *client.Conn) {
 		conn.SetTLSConfig(tlsConfig)
 	}
-	user := sessionCtx.DatabaseUser
-	var password string
+
 	switch {
 	case sessionCtx.Database.IsRDS():
 		password, err = e.Auth.GetRDSAuthToken(sessionCtx)
@@ -214,13 +215,9 @@ func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*clie
 			if err == nil && port == CloudSQLListenPort {
 				uri = net.JoinHostPort(host, CloudSQLProxyListenPort)
 			}
-			tlsConn, err := tls.Dial("tcp", uri, tlsConfig)
-			if err != nil {
-				return nil, trace.Wrap(err)
-			}
-			clientOpt = func(conn *client.Conn) {
-				conn.Conn.Close() // close connection created by mysql client
-				conn.Conn = packet.NewTLSConn(tlsConn)
+			connectOpts = nil
+			dialer = func(ctx context.Context, network, address string) (net.Conn, error) {
+				return tls.Dial("tcp", uri, tlsConfig)
 			}
 		}
 	case sessionCtx.Database.IsAzure():
@@ -233,12 +230,18 @@ func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*clie
 		user = fmt.Sprintf("%v@%v", user, sessionCtx.Database.GetAzure().Name)
 	}
 
+	if dialer == nil {
+		nd := &net.Dialer{}
+		dialer = nd.DialContext
+	}
+
 	// TODO(r0mant): Set CLIENT_INTERACTIVE flag on the client?
-	conn, err := client.Connect(sessionCtx.Database.GetURI(),
+	conn, err := client.ConnectWithDialer(ctx, "tcp", sessionCtx.Database.GetURI(),
 		user,
 		password,
 		sessionCtx.DatabaseName,
-		clientOpt)
+		dialer,
+		connectOpts)
 	if err != nil {
 		if trace.IsAccessDenied(common.ConvertError(err)) && sessionCtx.Database.IsRDS() {
 			return nil, trace.AccessDenied(`Could not connect to database:
