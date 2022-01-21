@@ -77,8 +77,6 @@ type ProxyServerConfig struct {
 	Tunnel reversetunnel.Server
 	// TLSConfig is the proxy server TLS configuration.
 	TLSConfig *tls.Config
-	//
-	WebTLSConfig *tls.Config
 	// Limiter is the connection/rate limiter.
 	Limiter *limiter.Limiter
 	// Emitter is used to emit audit events.
@@ -343,9 +341,13 @@ func (s *ProxyServer) MySQLProxy() *mysql.Proxy {
 
 // SQLServerProxy returns a new instance of the SQL Server protocol aware proxy.
 func (s *ProxyServer) SQLServerProxy() *sqlserver.Proxy {
+	// SQL Server clients don't support client certificates, connections
+	// come over TLS routing tunnel.
+	tlsConf := s.cfg.TLSConfig.Clone()
+	tlsConf.ClientAuth = tls.NoClientCert
+	tlsConf.GetConfigForClient = nil
 	return &sqlserver.Proxy{
-		TLSConfig: s.cfg.TLSConfig,
-		//TLSConfig:  s.cfg.WebTLSConfig,
+		TLSConfig:  tlsConf,
 		Middleware: s.middleware,
 		Service:    s,
 		Log:        s.log,

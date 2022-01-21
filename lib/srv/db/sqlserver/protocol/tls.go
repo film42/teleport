@@ -1,9 +1,24 @@
+/*
+Copyright 2022 Gravitational, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package protocol
 
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -12,7 +27,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func DoTLSHandshake(conn net.Conn, conf *tls.Config) (*tls.Conn, error) {
+func TLSHandshake(conn net.Conn, conf *tls.Config) (*tls.Conn, error) {
 	handshakeConn := &tlsHandshakeConn{c: conn}
 
 	passConn := &passthroughConn{handshakeConn}
@@ -23,8 +38,6 @@ func DoTLSHandshake(conn net.Conn, conf *tls.Config) (*tls.Conn, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	fmt.Printf("==> Connection state: %#v\n", tlsConn.ConnectionState())
-
 	passConn.c = conn
 
 	return tlsConn, nil
@@ -32,62 +45,16 @@ func DoTLSHandshake(conn net.Conn, conf *tls.Config) (*tls.Conn, error) {
 
 type tlsHandshakeConn struct {
 	c net.Conn
-
-	packetWriteInProgress bool
-	packetReadInProgress  bool
-	b                     bytes.Buffer
-}
-
-func (c *tlsHandshakeConn) Read2(b []byte) (int, error) {
-	// If we've been writing a packet, flush it first before starting a read.
-	if c.packetWriteInProgress {
-		fmt.Println("=== TLS DEBUG === FLUSHING BUFFER")
-		pkt := c.b.Bytes()
-
-		// Update packet length.
-		binary.BigEndian.PutUint16(pkt[2:], uint16(len(pkt)))
-
-		fmt.Printf("=== WRITING TLS PACKET LEN: %v ===\n", len(pkt))
-		fmt.Println(hex.Dump(pkt))
-		fmt.Println("=======================")
-
-		// Write to the connection.
-		_, err := c.c.Write(pkt)
-		if err != nil {
-			return 0, trace.Wrap(err)
-		}
-
-		// Reset the flag so when the next write comes we'll start a new packet.
-		c.packetWriteInProgress = false
-		c.packetReadInProgress = false
-	}
-
-	// Read a new packet.
-	if !c.packetReadInProgress {
-		fmt.Println("=== TLS DEBUG === STARTING NEW READ PACKET")
-		pkt, err := ReadPacket(c.c)
-		if err != nil {
-			return 0, trace.Wrap(err)
-		}
-		if pkt.Type != PacketTypePreLogin {
-			return 0, trace.BadParameter("expected PRELOGIN packet, got: %#v", pkt.Type)
-		}
-		c.b.Reset()
-		c.b.Write(pkt.Data)
-		c.packetReadInProgress = true
-	}
-	fmt.Println("=== TLS DEBUG === READING FROM BUFFER")
-	return c.b.Read(b)
+	b bytes.Buffer
 }
 
 func (c *tlsHandshakeConn) Read(b []byte) (int, error) {
+	// First read remainder from the buffer.
 	if c.b.Len() > 0 {
-		fmt.Println("=== TLS DEBUG === READING REMAINDER FROM BUFFER")
 		return c.b.Read(b)
 	}
 
 	// Read a new packet.
-	fmt.Println("=== TLS DEBUG === STARTING NEW READ PACKET")
 	pkt, err := ReadPacket(c.c)
 	if err != nil {
 		return 0, trace.Wrap(err)
@@ -97,48 +64,21 @@ func (c *tlsHandshakeConn) Read(b []byte) (int, error) {
 	}
 	c.b.Write(pkt.Data) // TODO handle error
 
-	fmt.Println("=== TLS DEBUG === READING FROM BUFFER")
 	return c.b.Read(b)
 }
 
 func (c *tlsHandshakeConn) Write(b []byte) (int, error) {
 	// TLS payload should be sent as PRELOGIN packets.
-	pkt := append([]byte{
-		PacketTypePreLogin,
-		0x01,
-		0, 0, // length
-		0, 0,
-		0,
-		0,
-	}, b...)
-
-	// Update packet length.
-	binary.BigEndian.PutUint16(pkt[2:], uint16(len(pkt)))
+	pkt, err := makePacket(PacketTypePreLogin, b)
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
 
 	fmt.Printf("=== WRITING TLS PACKET LEN: %v ===\n", len(pkt))
 	fmt.Println(hex.Dump(pkt))
 	fmt.Println("=======================")
 
 	return c.c.Write(pkt)
-}
-
-func (c *tlsHandshakeConn) Write2(b []byte) (int, error) {
-	// Start a new PRELOGIN packet unless we're already writing one.
-	if !c.packetWriteInProgress {
-		fmt.Println("=== TLS DEBUG === STARTING NEW WRITE PACKET")
-		c.b.Write([]byte{
-			// TLS payload should be sent as PRELOGIN packets.
-			PacketTypePreLogin,
-			0x01,
-			0, 0, // length
-			0, 0,
-			0,
-			0,
-		})
-		c.packetWriteInProgress = true
-	}
-	fmt.Println("=== TLS DEBUG === WRITING TO BUFFER")
-	return c.b.Write(b)
 }
 
 func (c *tlsHandshakeConn) Close() error {

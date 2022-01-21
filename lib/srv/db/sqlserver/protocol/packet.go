@@ -26,6 +26,9 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// PacketHeader is a parsed form of a 8-byte SQL server protocol packet header.
+//
+// Note: the order of fields in the struct matters.
 type PacketHeader struct {
 	Type     uint8
 	Status   uint8
@@ -70,7 +73,7 @@ func ReadPacket(conn io.Reader) (*Packet, error) {
 	}
 
 	// Read packet data. Packet length includes header.
-	dataBytes := make([]byte, 0, header.Length-packetHeaderSize)
+	dataBytes := make([]byte, header.Length-packetHeaderSize)
 	if _, err := io.ReadFull(conn, dataBytes); err != nil {
 		return nil, trace.ConvertSystemError(err)
 	}
@@ -90,8 +93,8 @@ func ReadPacket(conn io.Reader) (*Packet, error) {
 func makePacket(pktType uint8, pktData []byte) ([]byte, error) {
 	header := PacketHeader{
 		Type:   pktType,
-		Status: PacketStatusLast,
-		Length: uint16(len(pktData)),
+		Status: packetStatusLast,
+		Length: uint16(packetHeaderSize + len(pktData)),
 	}
 	headerBytes, err := header.Marshal()
 	if err != nil {
@@ -99,13 +102,3 @@ func makePacket(pktType uint8, pktData []byte) ([]byte, error) {
 	}
 	return append(headerBytes, pktData...), nil
 }
-
-const (
-	PacketTypeResponse uint8 = 0x04
-	PacketTypeLogin7   uint8 = 0x10
-	PacketTypePreLogin uint8 = 0x12
-
-	PacketStatusLast uint8 = 0x01
-
-	packetHeaderSize = 8
-)

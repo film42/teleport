@@ -3127,17 +3127,16 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 		}
 		dbProxyServer, err := db.NewProxyServer(process.ExitContext(),
 			db.ProxyServerConfig{
-				AuthClient:   conn.Client,
-				AccessPoint:  accessPoint,
-				Authorizer:   authorizer,
-				Tunnel:       tsrv,
-				TLSConfig:    tlsConfig,
-				WebTLSConfig: tlsConfigWeb,
-				Limiter:      connLimiter,
-				Emitter:      asyncEmitter,
-				Clock:        process.Clock,
-				ServerID:     cfg.HostUUID,
-				LockWatcher:  lockWatcher,
+				AuthClient:  conn.Client,
+				AccessPoint: accessPoint,
+				Authorizer:  authorizer,
+				Tunnel:      tsrv,
+				TLSConfig:   tlsConfig,
+				Limiter:     connLimiter,
+				Emitter:     asyncEmitter,
+				Clock:       process.Clock,
+				ServerID:    cfg.HostUUID,
+				LockWatcher: lockWatcher,
 			})
 		if err != nil {
 			return trace.Wrap(err)

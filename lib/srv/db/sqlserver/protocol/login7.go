@@ -1,3 +1,19 @@
+/*
+Copyright 2022 Gravitational, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package protocol
 
 import (
@@ -13,30 +29,30 @@ import (
 
 type Login7Packet struct {
 	Packet   Packet
-	Fields   Login7PacketFields
+	Fields   Login7PacketData
 	Data     []byte
 	User     string
 	Database string
 }
 
-type Login7PacketFields struct {
-	Length        uint32
-	TDSVersion    uint32
-	PacketSize    uint32
-	ClientProgVer uint32
-	ClientPID     uint32
-	ConnectionID  uint32
-
-	OptionFlags1 uint8
-	OptionFlags2 uint8
-	TypeFlags    uint8
-	OptionFlags3 uint8
-
-	ClientTimezone int32
-	ClientLCID     uint32
-
-	IbHostName        uint16
-	CchHostName       uint16
+// Login7PacketData is a parsed form of a LOGIN7 packet.
+//
+// Note: the order of fields in the struct matters.
+type Login7PacketData struct {
+	Length            uint32
+	TDSVersion        uint32
+	PacketSize        uint32
+	ClientProgVer     uint32
+	ClientPID         uint32
+	ConnectionID      uint32
+	OptionFlags1      uint8
+	OptionFlags2      uint8
+	TypeFlags         uint8
+	OptionFlags3      uint8
+	ClientTimezone    int32
+	ClientLCID        uint32
+	IbHostName        uint16 // offset
+	CchHostName       uint16 // length
 	IbUserName        uint16
 	CchUserName       uint16
 	IbPassword        uint16
@@ -51,8 +67,8 @@ type Login7PacketFields struct {
 	CchCltIntName     uint16
 	IbLanguage        uint16
 	CchLanguage       uint16
-	IbDatabase        uint16 // offset
-	CchDatabase       uint16 // length
+	IbDatabase        uint16
+	CchDatabase       uint16
 	ClientID          [6]byte
 	IbSSPI            uint16
 	CbSSPI            uint16
@@ -72,7 +88,7 @@ func ReadLogin7Packet(conn net.Conn) (*Login7Packet, error) {
 	if pkt.Type != PacketTypeLogin7 {
 		return nil, trace.BadParameter("expected LOGIN7 packet, got: %#v", pkt)
 	}
-	var fields Login7PacketFields
+	var fields Login7PacketData
 	buf := bytes.NewBuffer(pkt.Data)
 	err = binary.Read(buf, binary.LittleEndian, &fields)
 	if err != nil {
