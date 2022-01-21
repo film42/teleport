@@ -28,8 +28,8 @@ import (
 
 // AppServer represents a single proxied web app.
 type AppServer interface {
-	// Resource provides common resource methods.
-	Resource
+	// ResourceWithLabels provides common resource methods.
+	ResourceWithLabels
 	// GetNamespace returns server namespace.
 	GetNamespace() string
 	// GetTeleportVersion returns the teleport version the server is running on.
@@ -256,6 +256,27 @@ func (s *AppServerV3) CheckAndSetDefaults() error {
 // Copy returns a copy of this app server object.
 func (s *AppServerV3) Copy() AppServer {
 	return proto.Clone(s).(*AppServerV3)
+}
+
+// Origin returns the origin value of the resource.
+func (s *AppServerV3) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *AppServerV3) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
+}
+
+// GetAllLabels returns resource's labels.
+func (s *AppServerV3) GetAllLabels() map[string]string {
+	return s.Metadata.Labels
+}
+
+// MatchSearch goes through select field values and tries to
+// match against the list of search values.
+func (s *AppServerV3) MatchSearch(values []string) bool {
+	return MatchSearch(nil, values, nil)
 }
 
 // AppServers represents a list of app servers.

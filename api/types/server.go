@@ -31,8 +31,8 @@ import (
 
 // Server represents a Node, Proxy or Auth server in a Teleport cluster
 type Server interface {
-	// Resource provides common resource headers
-	Resource
+	// ResourceWithLabels provides common resource headers
+	ResourceWithLabels
 	// GetTeleportVersion returns the teleport version the server is running on
 	GetTeleportVersion() string
 	// GetAddr return server address
@@ -41,8 +41,6 @@ type Server interface {
 	GetHostname() string
 	// GetNamespace returns server namespace
 	GetNamespace() string
-	// GetAllLabels returns server's static and dynamic label values merged together
-	GetAllLabels() map[string]string
 	// GetLabels returns server's static label key pairs
 	GetLabels() map[string]string
 	// GetCmdLabels gets command labels
@@ -351,6 +349,32 @@ func (s *ServerV2) CheckAndSetDefaults() error {
 	}
 
 	return nil
+}
+
+// MatchSearch goes through select field values and tries to
+// match against the list of search values.
+func (s *ServerV2) MatchSearch(values []string) bool {
+	var fieldVals []string
+	var custom func(val string) bool
+
+	if s.GetKind() == KindNode {
+		fieldVals = []string{s.GetName(), s.GetHostname(), s.GetAddr(), fmt.Sprint(s.GetAllLabels())}
+		custom = func(val string) bool {
+			return strings.EqualFold(val, "tunnel") && s.GetUseTunnel()
+		}
+	}
+
+	return MatchSearch(fieldVals, values, custom)
+}
+
+// Origin returns the origin value of the resource.
+func (s *ServerV2) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *ServerV2) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
 }
 
 // DeepCopy creates a clone of this server value

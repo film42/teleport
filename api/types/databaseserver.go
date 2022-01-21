@@ -28,8 +28,8 @@ import (
 
 // DatabaseServer represents a database access server.
 type DatabaseServer interface {
-	// Resource provides common resource methods.
-	Resource
+	// ResourceWithLabels provides common resource methods.
+	ResourceWithLabels
 	// GetNamespace returns server namespace.
 	GetNamespace() string
 	// GetTeleportVersion returns the teleport version the server is running on.
@@ -246,6 +246,27 @@ func (s *DatabaseServerV3) CheckAndSetDefaults() error {
 // Copy returns a copy of this database server object.
 func (s *DatabaseServerV3) Copy() DatabaseServer {
 	return proto.Clone(s).(*DatabaseServerV3)
+}
+
+// MatchSearch goes through select field values and tries to
+// match against the list of search values.
+func (s *DatabaseServerV3) MatchSearch(values []string) bool {
+	return MatchSearch(nil, values, nil)
+}
+
+// Origin returns the origin value of the resource.
+func (s *DatabaseServerV3) Origin() string {
+	return s.Metadata.Origin()
+}
+
+// SetOrigin sets the origin value of the resource.
+func (s *DatabaseServerV3) SetOrigin(origin string) {
+	s.Metadata.SetOrigin(origin)
+}
+
+// GetAllLabels returns resource's labels.
+func (s *DatabaseServerV3) GetAllLabels() map[string]string {
+	return CombineLabels(s.Metadata.Labels, s.Spec.DynamicLabels)
 }
 
 // DatabaseServers represents a list of database servers.
