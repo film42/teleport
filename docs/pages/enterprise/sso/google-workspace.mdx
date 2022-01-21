@@ -27,82 +27,63 @@ to define policies like:
 
 Before you get started you’ll need:
 
-- An Enterprise version of Teleport downloaded from [https://dashboard.gravitational.com/](https://dashboard.gravitational.com/web/login).
-- Be a Google Workspace Super Admin. As Google Best Practices, we would recommend setting up a separate super admin with 2FA vs using your user.
-  - e.g. A dedicated account [ben-ops@practice.io](mailto:ben-ops@practice.io) vs my daily [ben@practice.io](mailto:ben@practice.io)
-- Ability to create GCP Project.
-  - This might require signing up to GCP, but for this project it won’t require using any paid services. It’s just a side effect of G Suite and GCP being closely related.
-- Have a [verified Domain](https://support.google.com/a/answer/60216?hl=en).
-- Ability to Setup Google Workspace Groups
+- Either an Enterprise version of Teleport (downloaded via the [Enterprise dashboard](https://dashboard.gravitational.com/web/login)) or a Teleport Cloud account (sign up for a [free trial](https://goteleport.com/signup/)).
+- A Google Workspace account with a Super Admin role. We recommend setting up a separate account with 2FA for this instead of using your typical Google Workspace account (e.g., use ben-ops@example.com instead of ben@example.com).
+- Ability to create a Google Cloud project, which requires signing up for Google Cloud. Note that this guide will not require using any paid Google Cloud services.
+- A [verified domain](https://support.google.com/a/answer/60216?hl=en).
+- Ability to set up Google Workspace groups
 
-## Configure G Suite
+## Configure Google Workspace
 
 1. Obtain OAuth 2.0 credentials
    [https://developers.google.com/identity/protocols/OpenIDConnect](https://developers.google.com/identity/protocols/OpenIDConnect)
-2. Create a new Project.
+2. Create a new project.
    ![Create New Project](../../../img/gsuite/gsuite-1-new-project.png)
-3. Select OAuth client ID.
+3. Select "OAuth client ID".
    ![Create OAuth Creds](../../../img/gsuite/gsuite-2-created-creds.png)
-4. Make Application Type Public & Setup Domain Verification
+4. Set "Application type" to "Public" and set up domain verification.
    ![Setup Application Type](../../../img/gsuite/gsuite-3-oauth.png)
-5. Copy OAuth Client ID and Client Secret for YAML Below.
-   Note: The redirect_url: `https://teleport.example.com:3080/v1/webapi/oidc/callback`
+5. Copy the OAuth Client ID and Client Secret, which we will use later when configuring SSO.
 
 ![Copy Client Secret](../../../img/gsuite/gsuite-5-copy-client-id.png)
 
-## Create a Service Account
+## Create a service account
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-5a-service-account.png)
 
-Leave Service account users roles, and admin roles as blank.
+Leave the "users role" and "admins role" fields blank.
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-5b-service-account.png)
 
-Leave Service account permissions as blank.
+Leave the "Service account permissions" field blank.
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-5c-service-account.png)
 
-### Enable Account Delegation
+### Enable account delegation
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-5d-service-account-delegation.png)
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-5e-enable-delegation@2x.png)
 
-### Download Service Account JSON
+### Download service account JSON
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-5f-download-json.png)
 
-This JSON file will need to be uploaded to the Authentication server, and will be later referenced by
+This JSON file will need to be uploaded to the Teleport Auth Server, and will be later referenced by
 the OIDC Connector, under `google_service_account_uri` or inline with `google_service_account`.
 
 <Admonition type="note">
-  Teleport requires the service account JSON to be uploaded to all Teleport authentication servers when setting
-  up in a High Availability config.
+  Teleport requires the service account JSON to be uploaded to all Teleport Auth Server hosts when deploying Teleport in a High Availability configuration.
 </Admonition>
 
-## Manage API Scopes
+## Manage API scopes
 
-Before setting the Manage API client access capture the client ID of the service account.
+Copy the client ID of your service account. To manage API client access within Google Workspace, go to Security -> Settings.  Navigate to Advanced Settings and open Manage API client access. Put the client ID in the Client Name field and the below permissions in the API scopes as a single comma-separated line. Press Authorize.
 
-Within GSuite to access the Manage API client access go to Security -> Settings.  Navigate to Advanced Settings and open Manage API client access.  Put the client ID in the Client Name field and the below permissions in the API scopes as a single comma separated line.  Press Authorize.
-
-<Admonition
-  type="tip"
-  title="Warning"
->
-  Do not use the email of the service account. The configuration display will look the same but the service account will not have the domain-wide delegation required. The `client_id` field must be the unique ID number captured from the admin UI. An indicator that this is misconfigured is if you see "Client is unauthorized to retrieve access tokens using this method, or client not authorized for any of the scopes requested." in your log.
-</Admonition>
-
-<Admonition
-  type="tip"
-  title="Note"
->
-  The email that you set for `google_admin_email` **must** be the email address of a user that has permission to list all groups, users, and group membership in your G Suite account. This user will generally need super admin privileges.
-</Admonition>
-
-**Client Name:** For Client Name: Use the Unique ID for the service account.  [See Video for instructions](https://youtu.be/DG97l8WJ6oU?t=281).
+**Client Name:** Use the unique ID for the service account ([see video for instructions](https://youtu.be/DG97l8WJ6oU?t=281)).
 
 **API Scopes:** Copy these three API Scopes.
+
 
 ```
 https://www.googleapis.com/auth/admin.directory.group.member.readonly, https://www.googleapis.com/auth/admin.directory.group.readonly, https://www.googleapis.com/auth/admin.directory.user.readonly
@@ -110,14 +91,10 @@ https://www.googleapis.com/auth/admin.directory.group.member.readonly, https://w
 
 ![Create OAuth Creds](../../../img/gsuite/gsuite-6a-manage-access.png)
 
-## Create a OIDC Connector
 
-Now, create a OIDC connector [resource](../../setup/reference/resources.mdx).
-There are two options for setting the `google_service_account` value.  You can set the JSON file in the auth server and give a URI to the file.
-The second is populating the contents via inline.  Inline is required for Teleport Cloud.
-Write down this template as `gsuite-connector.yaml`:
+## Create an OIDC connector
 
-
+Create the following OIDC connector [resource spec](../../setup/reference/resources.mdx) as `gsuite-connector.yaml`. We will explain how to choose values for fields within the resource spec.
 
 <Tabs>
   <TabItem label="Google Service Account via URI">
@@ -132,6 +109,20 @@ Write down this template as `gsuite-connector.yaml`:
     ```
   </TabItem>
 </Tabs>
+
+There are two options for setting the `google_service_account` value. You can set the JSON file in the auth server and give a URI to the file.
+The second is populating the contents via inline.  Inline is required for Teleport Cloud.
+
+The email that you set for `google_admin_email` **must** be the email address of a user that has permission to list all groups, users, and group membership in your Google Workspace account. This user will generally need Super Admin privileges.
+
+<Admonition
+type="tip"
+title="Warning"
+>
+Do not use the email of the service account. The configuration display will look the same, but the service account will not have the required domain-wide delegation.
+</Admonition>
+
+The `client_id` field must be the unique ID number captured from the admin UI. An indicator that this is misconfigured is if you see "Client is unauthorized to retrieve access tokens using this method, or client not authorized for any of the scopes requested." in your log.
 
 
 Create the connector using `tctl` tool:
