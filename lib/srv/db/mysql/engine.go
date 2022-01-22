@@ -163,18 +163,17 @@ func (e *Engine) checkAccess(ctx context.Context, sessionCtx *common.Session) er
 
 // connect establishes connection to MySQL database.
 func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*client.Conn, error) {
-	var dialer client.Dialer
-	var password string
-	user := sessionCtx.DatabaseUser
-
 	tlsConfig, err := e.Auth.GetTLSConfig(ctx, sessionCtx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	connectOpts := func(conn *client.Conn) {
+	connectOpt := func(conn *client.Conn) {
 		conn.SetTLSConfig(tlsConfig)
 	}
 
+	var dialer client.Dialer
+	var password string
+	user := sessionCtx.DatabaseUser
 	switch {
 	case sessionCtx.Database.IsRDS():
 		password, err = e.Auth.GetRDSAuthToken(sessionCtx)
@@ -209,16 +208,17 @@ func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*clie
 		// by creating a TLS connection to the cloud proxy port and
 		// overridding mysql client's connection. mysql on the default port
 		// does not trust the ephemeral cert's CA but cloud proxy does.
-		if sessionCtx.Database.GetTLS().Mode != types.DatabaseTLSMode_INSECURE {
+		if len(tlsConfig.Certificates) > 0 { // has client certificate
 			uri := sessionCtx.Database.GetURI()
 			host, port, err := net.SplitHostPort(uri)
 			if err == nil && port == CloudSQLListenPort {
 				uri = net.JoinHostPort(host, CloudSQLProxyListenPort)
 			}
-			connectOpts = nil
 			dialer = func(ctx context.Context, network, address string) (net.Conn, error) {
-				return tls.Dial("tcp", uri, tlsConfig)
+				tlsDialer := tls.Dialer{Config: tlsConfig}
+				return tlsDialer.DialContext(ctx, network, address)
 			}
+			connectOpt = nil // don't set tlsConfig in mysql client
 		}
 	case sessionCtx.Database.IsAzure():
 		password, err = e.Auth.GetAzureAccessToken(ctx, sessionCtx)
@@ -230,8 +230,9 @@ func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*clie
 		user = fmt.Sprintf("%v@%v", user, sessionCtx.Database.GetAzure().Name)
 	}
 
+	// use default dialer unless we've already initialized it.
 	if dialer == nil {
-		nd := &net.Dialer{}
+		var nd net.Dialer
 		dialer = nd.DialContext
 	}
 
@@ -241,7 +242,7 @@ func (e *Engine) connect(ctx context.Context, sessionCtx *common.Session) (*clie
 		password,
 		sessionCtx.DatabaseName,
 		dialer,
-		connectOpts)
+		connectOpt)
 	if err != nil {
 		if trace.IsAccessDenied(common.ConvertError(err)) && sessionCtx.Database.IsRDS() {
 			return nil, trace.AccessDenied(`Could not connect to database:

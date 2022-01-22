@@ -365,6 +365,7 @@ func (a *dbAuth) getTLSConfigVerifyFull(ctx context.Context, sessionCtx *Session
 		tlsConfig.VerifyConnection = getVerifyCloudSQLCertificate(tlsConfig.RootCAs)
 
 		// Generate client SSL certificate when instance's RequireSsl setting is true.
+		// TODO(jimbishopp): getCloudSQLDatabaseInstance should be in cloud package?
 		dbInstance, err := a.getCloudSQLDatabaseInstance(ctx, sessionCtx)
 		if err != nil {
 			return nil, trace.Wrap(err, "failed to get Cloud SQL instance information for %q", tlsConfig.ServerName)
